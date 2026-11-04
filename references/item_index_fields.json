@@ -1,0 +1,18 @@
+[
+  {"name": "所属订单号", "type": "text"},
+  {"name": "序号", "type": "number"},
+  {"name": "商品", "type": "text"},
+  {"name": "编码", "type": "text"},
+  {"name": "数量", "type": "number"},
+  {"name": "单位", "type": "text"},
+  {"name": "供应商", "type": "text"},
+  {"name": "溯源码", "type": "text"},
+  {"name": "报告文件", "type": "text"},
+  {"name": "检测机构", "type": "text"},
+  {"name": "检测日期", "type": "date"},
+  {"name": "报告有效期", "type": "date"},
+  {"name": "状态", "type": "select", "multiple": false, "options": [
+    {"name": "正常"}, {"name": "无溯源码"}, {"name": "无报告"}, {"name": "报告过期"}, {"name": "溯源失败"}
+  ]},
+  {"name": "打包时间", "type": "datetime"}
+]

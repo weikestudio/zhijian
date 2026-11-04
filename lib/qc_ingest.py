@@ -40,8 +40,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-HERE = Path(__file__).parent
-OCR_BIN = HERE / "tools" / "ocr"
+HERE = Path(__file__).parent.resolve()
+# qc_ingest.py 在 lib/ 下，tools/ocr 在仓库根目录
+OCR_BIN = HERE.parent / "tools" / "ocr"
 IMG_EXT = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp", ".heic"}
 PDF_EXT = {".pdf"}
 

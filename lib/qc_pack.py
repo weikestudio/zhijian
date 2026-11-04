@@ -463,6 +463,25 @@ def pack_one(cli, order_stub: dict, outroot: Path, dry_run=False) -> dict:
             w.writeheader()
             w.writerows(index_rows)
 
+        # 5) 同步索引到飞书多维表格「订单商品索引」表
+        try:
+            import bitable
+            n = bitable.upsert_items(order_no, index_rows)
+            print(f"    ✓ {n} 条商品索引已同步到飞书多维表格")
+            # 同时写订单关联表
+            bitable.upsert_order({
+                "order_no": order_no,
+                "delivery_date": order.get("delivery_date", ""),
+                "customer": order.get("user_name", ""),
+                "items": len(items),
+                "reports": len(file_registry),
+                "issues": len(missing),
+                "missing": missing,
+                "pack_pdf": str(outdir / "订单质检报告合订本.pdf"),
+            })
+        except Exception as e:
+            print(f"    ⚠ 多维表格同步失败（不影响 PDF）: {e}", file=sys.stderr)
+
     status = "✅" if not missing else f"⚠ {len(missing)} 项异常"
     print(f"  {order_no}  商品{len(items)}  报告{len(file_registry)}  {status}")
     for m in missing[:5]:

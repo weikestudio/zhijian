@@ -13,6 +13,7 @@ import config as cfgmod
 BASE = cfgmod.get("bitable", "app_token", default="SYnubkNJDa8sYus9TdKcUmFfnYb")
 T_REPORTS = cfgmod.get("bitable", "reports_table_id", default="tblzyCNRP2unTTUF")
 T_ORDERS = cfgmod.get("bitable", "orders_table_id", default="tblsY22CdrlTN0Qe")
+T_ITEMS = cfgmod.get("bitable", "items_table_id", default="tbl41NvurOwEquYE")
 
 LEVEL_PREFIX = {
     "L0": "L0_资质证件", "L1": "L1_法定检验", "L2": "L2_出厂检验",
@@ -118,6 +119,60 @@ def list_orders(page_size: int = 50) -> dict:
     res = _cli(["+record-list", "--table-id", T_ORDERS,
                 "--limit", str(page_size), "--format", "json"])
     return res.get("data", {})
+
+
+# ---------------- 订单商品索引 ----------------
+
+def upsert_items(order_no: str, index_rows: list[dict]):
+    """把打包时的商品级索引写入「订单商品索引」表"""
+    if not index_rows:
+        return 0
+    create = []
+    for r in index_rows:
+        status_raw = (r.get("状态") or "").strip()
+        # 归一化状态到选项
+        if "过期" in status_raw:
+            status = "报告过期"
+        elif "无溯源码" in status_raw:
+            status = "无溯源码"
+        elif "无报告" in status_raw:
+            status = "无报告"
+        elif "溯源接口失败" in status_raw:
+            status = "溯源失败"
+        elif status_raw == "正常":
+            status = "正常"
+        else:
+            status = "正常"
+        fields = {
+            "所属订单号": order_no,
+            "序号": r.get("序号", 0),
+            "商品": r.get("商品", ""),
+            "编码": r.get("编码", ""),
+            "数量": float(r.get("数量") or 0),
+            "单位": r.get("单位", ""),
+            "供应商": r.get("供应商", ""),
+            "溯源码": r.get("溯源码", ""),
+            "报告文件": r.get("报告文件", ""),
+            "检测机构": r.get("检测机构", ""),
+            "状态": [status],
+            "打包时间": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
+        if r.get("检测日期"):
+            fields["检测日期"] = f"{r['检测日期']} 00:00"
+        if r.get("报告有效期"):
+            fields["报告有效期"] = f"{r['报告有效期']} 00:00"
+        create.append({k: v for k, v in fields.items() if v not in ("", None, 0)})
+
+    written = 0
+    for i in range(0, len(create), 100):
+        chunk = create[i:i+100]
+        res = _cli(["+record-batch-create", "--table-id", T_ITEMS],
+                   {"create_records": chunk})
+        if res.get("ok"):
+            written += len(chunk)
+        else:
+            print(f"  商品索引写入失败: {res.get('error')}", file=sys.stderr)
+    return written
 
 
 # ---------------- 统计 ----------------
