@@ -65,19 +65,61 @@ def pdf_text(path: Path) -> str:
         return ""
 
 
+# OCR 后端：优先 macOS Vision，fallback 到 RapidOCR（跨平台）
+_OCR_ENGINE = None
+_OCR_ENGINE_FAILED = False
+
+
+def _get_ocr_engine():
+    """懒加载 OCR 引擎，首次调用时初始化"""
+    global _OCR_ENGINE, _OCR_ENGINE_FAILED
+    if _OCR_ENGINE is not None or _OCR_ENGINE_FAILED:
+        return _OCR_ENGINE
+    # 1. 优先 macOS Vision 二进制
+    if OCR_BIN.exists():
+        _OCR_ENGINE = "vision"
+        return _OCR_ENGINE
+    # 2. fallback: RapidOCR（纯 Python，跨平台）
+    try:
+        from rapidocr_onnxruntime import RapidOCR
+        _OCR_ENGINE = RapidOCR()
+        print("  OCR 引擎: RapidOCR (跨平台模式)")
+        return _OCR_ENGINE
+    except ImportError:
+        print("  ⚠ 未安装 OCR 引擎，请运行: pip install rapidocr-onnxruntime", file=sys.stderr)
+        _OCR_ENGINE_FAILED = True
+        return None
+
+
 def image_text(path: Path) -> str:
-    if not OCR_BIN.exists():
+    """识别图片文字，支持多后端"""
+    engine = _get_ocr_engine()
+    if engine is None:
         return ""
-    for attempt in range(2):  # 失败重试一次
+
+    # macOS Vision 后端
+    if engine == "vision":
+        for attempt in range(2):
+            try:
+                r = subprocess.run([str(OCR_BIN), str(path)], capture_output=True, timeout=120)
+                text = r.stdout.decode("utf-8", "replace")
+                if len(text.strip()) >= 20:
+                    return text
+            except Exception as e:
+                print(f"    Vision OCR 失败({attempt+1}/2) {path.name}: {e}", file=sys.stderr)
+        return text if 'text' in dir() else ""
+
+    # RapidOCR 后端
+    for attempt in range(2):
         try:
-            r = subprocess.run([str(OCR_BIN), str(path)], capture_output=True, timeout=120)
-            text = r.stdout.decode("utf-8", "replace")
-            if len(text.strip()) >= 20:
-                return text
-            # 第一次太短，重试一次
+            result, _ = engine(str(path))
+            if result and len(result) > 0:
+                text = "\n".join([r[1] for r in result if r and len(r) > 1])
+                if len(text.strip()) >= 20:
+                    return text
         except Exception as e:
-            print(f"    OCR 失败({attempt+1}/2) {path.name}: {e}", file=sys.stderr)
-    return text if 'text' in dir() else ""
+            print(f"    RapidOCR 失败({attempt+1}/2) {path.name}: {e}", file=sys.stderr)
+    return ""
 
 
 def to_image(path: Path, tmpdir: Path) -> Path | None:

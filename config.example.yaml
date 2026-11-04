@@ -7,9 +7,9 @@ sdp:
   base_url: "https://scm.sdongpo.com"
 
 storage:
-  library_root: "/Users/v1/Vonework/library"   # 本地报告归档根目录
-  inbox_dir: "/Users/v1/Downloads/供应商报告"  # 待入库收件箱
-  pack_out_dir: "/Users/v1/Vonework/library/_packed"  # 合订本输出目录
+  library_root: "~/Vonework/library"          # 本地报告归档根目录（跨平台）
+  inbox_dir: "~/Downloads/供应商报告"          # 待入库收件箱
+  pack_out_dir: "~/Vonework/library/_packed"  # 合订本输出目录
 
 bitable:
   app_token: "SYnubkNJDa8sYus9TdKcUmFfnYb"    # 飞书多维表格 app_token

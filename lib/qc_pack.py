@@ -48,12 +48,20 @@ from sdp_client import SdpClient, SdpError  # noqa: E402
 import config as cfgmod  # noqa: E402
 
 HERE = Path(__file__).parent
+# 跨平台中文字体候选：macOS / Windows / Linux
 CJK_FONT_CANDIDATES = [
+    # macOS
     "/System/Library/Fonts/Hiragino Sans GB.ttc",
     "/System/Library/Fonts/Supplemental/Songti.ttc",
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/System/Library/Fonts/STHeiti Light.ttc",
+    # Windows
+    "C:/Windows/Fonts/msyh.ttc",      # 微软雅黑
+    "C:/Windows/Fonts/simhei.ttf",    # 黑体
+    "C:/Windows/Fonts/simsun.ttc",    # 宋体
+    # Linux
     "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
 ]
 
 
