@@ -69,10 +69,12 @@ def _delete_records(table_id: str, record_ids: list[str]):
     for i in range(0, len(record_ids), 50):
         chunk = record_ids[i:i+50]
         try:
-            _cli(["+record-delete", "--table-id", table_id, "--yes"],
-                 {"record_id_list": chunk})
+            res = _cli(["+record-delete", "--table-id", table_id, "--yes"],
+                       {"record_id_list": chunk})
+            if not res.get("ok"):
+                print(f"  删除旧记录返回失败: {res.get('error',{}).get('message','')[:100]}", file=sys.stderr)
         except Exception as e:
-            print(f"  删除旧记录失败: {e}", file=sys.stderr)
+            print(f"  删除旧记录异常: {e}", file=sys.stderr)
 
 
 def clear_order_records(order_no: str):
@@ -114,16 +116,17 @@ def _map_report(rec: dict) -> dict:
 
 
 def upsert_reports(records: list[dict]):
-    """批量写入报告库，按哈希去重（已存在的跳过）"""
+    """批量写入报告库，按哈希去重：识别成功时覆盖旧记录，待确认时跳过"""
     if not records:
         return
-    # 查已有哈希集合
-    existing_hashes = set()
+    # 查已有哈希 -> record_id 映射
+    hash_to_rid = {}
     try:
         res = _cli(["+record-list", "--table-id", T_REPORTS,
                     "--limit", "200", "--format", "json"])
         d = res.get("data") or {}
         rows = d.get("data") or []
+        rid_list = d.get("record_id_list") or []
         fields_meta = d.get("fields") or []
         col_idx = None
         for i, f in enumerate(fields_meta):
@@ -132,26 +135,31 @@ def upsert_reports(records: list[dict]):
                 col_idx = i
                 break
         if col_idx is not None:
-            for row in rows:
+            for idx, row in enumerate(rows):
                 h = row[col_idx] if col_idx < len(row) else None
-                if h:
-                    existing_hashes.add(h)
+                if h and idx < len(rid_list):
+                    hash_to_rid[h] = rid_list[idx]
     except Exception:
-        pass  # 查询失败就直接写，不阻塞入库
+        pass
 
     create = []
-    skipped = 0
+    to_delete = []
     for rec in records:
         h = rec.get("哈希", "")
-        if h and h in existing_hashes:
-            skipped += 1
-            continue
+        is_review = bool(rec.get("待确认"))
+        old_rid = hash_to_rid.get(h)
+        if old_rid:
+            if is_review:
+                # 新的也是待确认，跳过（别覆盖好数据）
+                continue
+            else:
+                # 新的识别成功，删旧写新
+                to_delete.append(old_rid)
         create.append(_map_report(rec))
-        if h:
-            existing_hashes.add(h)
 
-    if skipped:
-        print(f"  跳过 {skipped} 条已存在的报告（按哈希去重）")
+    if to_delete:
+        _delete_records(T_REPORTS, to_delete)
+        print(f"  更新 {len(to_delete)} 条旧记录（识别更准）")
 
     for i in range(0, len(create), 100):
         chunk = create[i:i+100]
