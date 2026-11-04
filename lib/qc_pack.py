@@ -192,107 +192,6 @@ def make_alert_page(order: dict, missing: list) -> bytes:
     return buf.getvalue()
 
 
-def make_cover(order: dict, stats: dict) -> bytes:
-    """生成 A4 封面"""
-    from PIL import Image, ImageDraw
-    W, H = 1240, 1754          # A4 @150dpi
-    im = Image.new("RGB", (W, H), "white")
-    d = ImageDraw.Draw(im)
-    f_title = _font(58)
-    f_sub = _font(30)
-    f_body = _font(26)
-    f_small = _font(22)
-
-    d.rectangle([0, 0, W, 16], fill="#1f6feb")
-    d.text((90, 150), "学校食堂食材", font=f_sub, fill="#666")
-    d.text((90, 200), "食品检测报告合订本", font=f_title, fill="#111")
-    d.line([90, 300, W - 90, 300], fill="#ddd", width=3)
-
-    y = 360
-    rows = [
-        ("订单号", order.get("order_no", "")),
-        ("客户", order.get("user_name", "")),
-        ("收货地址", (order.get("address_detail") or "")[:40]),
-        ("发货日期", order.get("delivery_date", "")),
-        ("下单时间", order.get("create_time", "")),
-        ("商品行数", str(stats.get("items", 0))),
-        ("检测报告", f"{stats.get('reports', 0)} 份（去重后）"),
-        ("缺失/异常", f"{stats.get('issues', 0)} 项"),
-        ("生成时间", datetime.now().strftime("%Y-%m-%d %H:%M")),
-    ]
-    for k, v in rows:
-        d.text((90, y), k, font=f_body, fill="#888")
-        d.text((280, y), str(v), font=f_body, fill="#222")
-        y += 52
-
-    y += 30
-    d.line([90, y, W - 90, y], fill="#eee", width=2)
-    y += 34
-    d.text((90, y), "报告来源：蔬东坡供应链系统溯源记录", font=f_small, fill="#666")
-    d.text((90, y + 36), "本合订本由系统按订单自动装订，报告原件未经修改。", font=f_small, fill="#666")
-
-    # 待确认：匹配到了报告，但名字/供应商对不齐，不能当已验证
-    if stats.get("pending"):
-        y += 96
-        items = stats["pending"]
-        h = 46 + 34 * min(len(items), 5)
-        d.rectangle([90, y - 12, W - 90, y + h], outline="#d68a1a", width=3)
-        d.text((110, y), f"待人工确认：{len(items)} 项匹配到报告但证据未对齐",
-               font=f_body, fill="#8a5a00")
-        for i, nm in enumerate(items[:5]):
-            d.text((130, y + 46 + i * 34), f"· {nm}", font=f_small, fill="#8a5a00")
-        y += h + 10
-
-    # 缺失提示
-    if stats.get("missing"):
-        y += 96
-        d.rectangle([90, y - 12, W - 90, y + 46 + 34 * min(len(stats["missing"]), 6)], outline="#e5534b", width=3)
-        d.text((110, y), f"注意：以下 {len(stats['missing'])} 个商品未取得有效检测报告", font=f_body, fill="#c0392b")
-        for i, nm in enumerate(stats["missing"][:6]):
-            d.text((130, y + 46 + i * 34), f"· {nm}", font=f_small, fill="#c0392b")
-        if len(stats["missing"]) > 6:
-            d.text((130, y + 46 + 6 * 34), f"… 其余 {len(stats['missing']) - 6} 项见索引表",
-                   font=f_small, fill="#c0392b")
-
-    buf = io.BytesIO()
-    im.save(buf, format="PDF", resolution=150)
-    return buf.getvalue()
-
-
-def make_toc(entries: list[dict]) -> bytes:
-    """生成目录页，entries: [{idx, commodities, org, date, file, page}]"""
-    from PIL import Image, ImageDraw
-    W, H = 1240, 1754
-    im = Image.new("RGB", (W, H), "white")
-    d = ImageDraw.Draw(im)
-    f_h = _font(40)
-    f_body = _font(24)
-    f_small = _font(20)
-
-    d.rectangle([0, 0, W, 16], fill="#1f6feb")
-    d.text((90, 110), "目录", font=f_h, fill="#111")
-    d.line([90, 180, W - 90, 180], fill="#ddd", width=3)
-
-    y = 220
-    for e in entries:
-        if y > H - 120:
-            break
-        d.text((90, y), f"P{e['page']}", font=f_body, fill="#1f6feb")
-        title = e["commodities"]
-        if len(title) > 26:
-            title = title[:25] + "…"
-        d.text((200, y), title, font=f_body, fill="#222")
-        sub = f"{e['org'] or '未标注机构'} · {e['date'] or '无日期'}"
-        if len(sub) > 44:
-            sub = sub[:43] + "…"
-        d.text((200, y + 32), sub, font=f_small, fill="#777")
-        y += 84
-        d.line([90, y - 18, W - 90, y - 18], fill="#f0f0f0", width=1)
-    buf = io.BytesIO()
-    im.save(buf, format="PDF", resolution=150)
-    return buf.getvalue()
-
-
 def merge_to_pdf(parts: list[bytes], out: Path):
     from pypdf import PdfWriter, PdfReader
     w = PdfWriter()
@@ -466,9 +365,10 @@ def pack_one(cli, order_stub: dict, outroot: Path, dry_run=False) -> dict:
         # 5) 同步索引到飞书多维表格「订单商品索引」表
         try:
             import bitable
+            # 先清理该订单的旧记录，避免重复打包产生重复行
+            bitable.clear_order_records(order_no)
             n = bitable.upsert_items(order_no, index_rows)
             print(f"    ✓ {n} 条商品索引已同步到飞书多维表格")
-            # 同时写订单关联表
             bitable.upsert_order({
                 "order_no": order_no,
                 "delivery_date": order.get("delivery_date", ""),

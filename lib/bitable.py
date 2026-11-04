@@ -33,6 +33,56 @@ def _cli(args: list, payload: dict | None = None) -> dict:
         raise RuntimeError(f"lark-cli 返回非 JSON: {r.stdout[:300]} {r.stderr[:300]}")
 
 
+def _find_record_ids_by_field(table_id: str, field_name: str, value: str) -> list[str]:
+    """按字段值查 record_id 列表（用于重复写入前清理）"""
+    try:
+        res = _cli(["+record-list", "--table-id", table_id,
+                    "--limit", "200", "--format", "json"])
+        d = res.get("data") or {}
+        rows = d.get("data") or []
+        rid_list = d.get("record_id_list") or []
+        fields_meta = d.get("fields") or []
+        # fields_meta 可能是字段名列表，找 field_name 对应的列索引
+        col_idx = None
+        for i, f in enumerate(fields_meta):
+            fname = f.get("name") if isinstance(f, dict) else f
+            if fname == field_name:
+                col_idx = i
+                break
+        if col_idx is None:
+            return []
+        ids = []
+        for idx, row in enumerate(rows):
+            val = row[col_idx] if col_idx < len(row) else None
+            if val == value and idx < len(rid_list):
+                ids.append(rid_list[idx])
+        return ids
+    except Exception as e:
+        print(f"  查询旧记录失败: {e}", file=sys.stderr)
+        return []
+
+
+def _delete_records(table_id: str, record_ids: list[str]):
+    """批量删除记录"""
+    if not record_ids:
+        return
+    for i in range(0, len(record_ids), 50):
+        chunk = record_ids[i:i+50]
+        try:
+            _cli(["+record-delete", "--table-id", table_id, "--yes"],
+                 {"record_id_list": chunk})
+        except Exception as e:
+            print(f"  删除旧记录失败: {e}", file=sys.stderr)
+
+
+def clear_order_records(order_no: str):
+    """打包前清理该订单的旧记录（订单关联 + 商品索引），避免重复"""
+    for tid, field in [(T_ORDERS, "订单号"), (T_ITEMS, "所属订单号")]:
+        rids = _find_record_ids_by_field(tid, field, order_no)
+        if rids:
+            _delete_records(tid, rids)
+
+
 # ---------------- 报告库 ----------------
 
 def _map_report(rec: dict) -> dict:
@@ -64,13 +114,45 @@ def _map_report(rec: dict) -> dict:
 
 
 def upsert_reports(records: list[dict]):
-    """批量写入报告库（简单模式：直接新增，按哈希去重由调用方保证）"""
+    """批量写入报告库，按哈希去重（已存在的跳过）"""
     if not records:
         return
+    # 查已有哈希集合
+    existing_hashes = set()
+    try:
+        res = _cli(["+record-list", "--table-id", T_REPORTS,
+                    "--limit", "200", "--format", "json"])
+        d = res.get("data") or {}
+        rows = d.get("data") or []
+        fields_meta = d.get("fields") or []
+        col_idx = None
+        for i, f in enumerate(fields_meta):
+            fname = f.get("name") if isinstance(f, dict) else f
+            if fname == "哈希":
+                col_idx = i
+                break
+        if col_idx is not None:
+            for row in rows:
+                h = row[col_idx] if col_idx < len(row) else None
+                if h:
+                    existing_hashes.add(h)
+    except Exception:
+        pass  # 查询失败就直接写，不阻塞入库
+
     create = []
+    skipped = 0
     for rec in records:
+        h = rec.get("哈希", "")
+        if h and h in existing_hashes:
+            skipped += 1
+            continue
         create.append(_map_report(rec))
-    # 飞书批量创建上限 200
+        if h:
+            existing_hashes.add(h)
+
+    if skipped:
+        print(f"  跳过 {skipped} 条已存在的报告（按哈希去重）")
+
     for i in range(0, len(create), 100):
         chunk = create[i:i+100]
         res = _cli(["+record-batch-create", "--table-id", T_REPORTS],
