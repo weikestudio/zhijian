@@ -1,0 +1,21 @@
+[
+  {"name": "文件名", "type": "text"},
+  {"name": "报告等级", "type": "select", "multiple": false, "options": [
+    {"name": "L0_资质证件"}, {"name": "L1_法定检验"}, {"name": "L2_出厂检验"}, {"name": "L3_快检筛查"}, {"name": "L?_未识别"}
+  ]},
+  {"name": "报告类型", "type": "text"},
+  {"name": "检测项目", "type": "text"},
+  {"name": "检测机构", "type": "text"},
+  {"name": "报告日期", "type": "date"},
+  {"name": "产品SKU", "type": "text"},
+  {"name": "溯源码批次", "type": "text"},
+  {"name": "有CMA", "type": "checkbox"},
+  {"name": "有章", "type": "checkbox"},
+  {"name": "本地路径", "type": "text"},
+  {"name": "蔬东坡URL", "type": "url"},
+  {"name": "大小KB", "type": "number"},
+  {"name": "哈希", "type": "text"},
+  {"name": "置信度", "type": "number"},
+  {"name": "待确认", "type": "text"},
+  {"name": "入库时间", "type": "datetime"}
+]

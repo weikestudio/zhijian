@@ -1,0 +1,7 @@
+pypdf>=4.0
+pypdfium2>=4.0
+cryptography>=42.0
+pillow>=10.0
+flask>=3.0
+requests>=2.31
+pyyaml>=6.0

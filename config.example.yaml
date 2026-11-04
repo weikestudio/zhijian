@@ -1,0 +1,21 @@
+# 复制为 config.yaml 后填入真实值（config.yaml 已被 .gitignore 排除，不会提交）
+
+sdp:
+  appid: "e31649be1793b380"
+  secret: "644ff72ecc291cee488146af465d7ce7"
+  project_code: "cc_xdsl"        # 正式环境项目 code
+  base_url: "https://scm.sdongpo.com"
+
+storage:
+  library_root: "/Users/v1/Vonework/library"   # 本地报告归档根目录
+  inbox_dir: "/Users/v1/Downloads/供应商报告"  # 待入库收件箱
+  pack_out_dir: "/Users/v1/Vonework/library/_packed"  # 合订本输出目录
+
+bitable:
+  app_token: "SYnubkNJDa8sYus9TdKcUmFfnYb"    # 飞书多维表格 app_token
+  reports_table_id: "tblzyCNRP2unTTUF"         # 报告库表（后续会新增订单关联表）
+  orders_table_id: ""                          # 订单关联表，首次运行自动建
+
+server:
+  host: "127.0.0.1"
+  port: 8765

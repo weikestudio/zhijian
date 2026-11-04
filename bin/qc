@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""qc-report-keeper 命令行入口"""
+import sys
+import subprocess
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "lib"))
+
+
+def cmd_doctor():
+    """环境自检"""
+    import shutil
+    print(f"仓库目录: {ROOT}")
+    print(f"Python:  {sys.version.split()[0]}")
+    for mod in ["yaml", "requests", "pypdf", "pypdfium2", "flask"]:
+        try:
+            __import__(mod)
+            print(f"  ✓ {mod}")
+        except ImportError as e:
+            print(f"  ✗ {mod}  ({e})")
+    ocr = ROOT / "tools" / "ocr"
+    print(f"OCR 二进制: {'✓' if ocr.exists() else '✗'} ({ocr})")
+    cfg = ROOT / "config.yaml"
+    print(f"配置文件:   {'✓' if cfg.exists() else '✗'} ({cfg})")
+
+
+def cmd_ingest(args):
+    """入库: python -m qc_ingest --inbox ..."""
+    import qc_ingest
+    sys.argv = ["qc_ingest"] + args
+    qc_ingest.main()
+
+
+def cmd_pack(args):
+    """打包: qc pack --order DDxxx / --date YYYY-MM-DD"""
+    import qc_pack
+    sys.argv = ["qc_pack"] + args
+    qc_pack.main()
+
+
+def cmd_serve(args):
+    """启动 Web 工作台"""
+    from server import run
+    run(args)
+
+
+def cmd_pull(args):
+    """拉订单+报告"""
+    import qc_pipeline
+    sys.argv = ["qc_pipeline"] + args
+    qc_pipeline.main()
+
+
+COMMANDS = {
+    "doctor": (cmd_doctor, "环境自检"),
+    "ingest": (cmd_ingest, "报告入库: qc ingest [--inbox DIR] [--library DIR] [--dry-run]"),
+    "pack": (cmd_pack, "按订单打包: qc pack --order DDxxx 或 --date YYYY-MM-DD"),
+    "serve": (cmd_serve, "启动可视化工作台: qc serve [--port 8765]"),
+    "pull": (cmd_pull, "拉取订单与报告: qc pull --date YYYY-MM-DD"),
+}
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+        print("qc-report-keeper  生鲜质检报告管家\n")
+        for k, (_, desc) in COMMANDS.items():
+            print(f"  {k:8s}  {desc}")
+        return
+    cmd = sys.argv[1]
+    if cmd not in COMMANDS:
+        print(f"未知命令: {cmd}")
+        sys.exit(1)
+    fn = COMMANDS[cmd][0]
+    if cmd == "doctor":
+        fn()
+    else:
+        fn(sys.argv[2:])
+
+
+if __name__ == "__main__":
+    main()

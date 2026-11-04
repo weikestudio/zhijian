@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>质检报告管家</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #f5f6f8; color: #222; font-size: 14px; }
+  header { background: #1f6feb; color: #fff; padding: 14px 24px;
+           display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  nav { background: #fff; padding: 0 24px; border-bottom: 1px solid #e5e7eb;
+        display: flex; gap: 4px; }
+  nav button { background: none; border: none; padding: 12px 16px; cursor: pointer;
+                font-size: 14px; color: #555; border-bottom: 2px solid transparent; }
+  nav button.active { color: #1f6feb; border-bottom-color: #1f6feb; font-weight: 500; }
+  main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .card { background: #fff; padding: 20px; border-radius: 8px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .card .num { font-size: 28px; font-weight: 600; color: #1f6feb; }
+  .card .label { color: #888; margin-top: 4px; }
+  .panel { background: #fff; border-radius: 8px; padding: 20px;
+           box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 16px; }
+  .panel h2 { font-size: 16px; margin-bottom: 16px; }
+  input, button.primary { padding: 8px 12px; border: 1px solid #d1d5db;
+                          border-radius: 6px; font-size: 14px; }
+  button.primary { background: #1f6feb; color: #fff; border: none; cursor: pointer;
+                   margin-left: 8px; }
+  button.primary:hover { background: #1a5fd0; }
+  button.primary:disabled { background: #9bbef3; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+  th { color: #888; font-weight: 500; font-size: 13px; }
+  .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+  .L1 { background: #dcfce7; color: #166534; }
+  .L2 { background: #fef3c7; color: #92400e; }
+  .L3 { background: #fee2e2; color: #991b1b; }
+  .L0 { background: #e0e7ff; color: #3730a3; }
+  .log { background: #1f2937; color: #d1d5db; padding: 12px; border-radius: 6px;
+         font-family: Menlo, monospace; font-size: 12px; max-height: 300px;
+         overflow: auto; white-space: pre-wrap; margin-top: 12px; }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .hidden { display: none; }
+  .muted { color: #888; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>生鲜质检报告管家</h1>
+  <span id="clock" class="muted" style="color:#cfe1ff"></span>
+</header>
+<nav>
+  <button class="active" data-tab="dash">仪表盘</button>
+  <button data-tab="reports">报告库</button>
+  <button data-tab="pack">按订单打包</button>
+  <button data-tab="orders">订单记录</button>
+</nav>
+<main>
+
+  <!-- 仪表盘 -->
+  <section id="tab-dash">
+    <div class="cards">
+      <div class="card"><div class="num" id="s-reports">-</div><div class="label">多维表格报告数</div></div>
+      <div class="card"><div class="num" id="s-orders">-</div><div class="label">已打包订单数</div></div>
+      <div class="card"><div class="num" id="s-files">-</div><div class="label">本地归档文件</div></div>
+      <div class="card"><div class="num" id="s-time">-</div><div class="label">当前时间</div></div>
+    </div>
+    <div class="panel">
+      <h2>系统状态</h2>
+      <p class="muted">归档根目录: <code id="s-lib">-</code></p>
+      <p class="muted" style="margin-top:8px">
+        触发方式: ① 把图片/PDF 拖给豆包自动入库; ② 下方输入订单号一键打包; ③ 每日早 6 点自动跑。
+      </p>
+    </div>
+  </section>
+
+  <!-- 报告库 -->
+  <section id="tab-reports" class="hidden">
+    <div class="panel">
+      <h2>报告库（来自飞书多维表格）</h2>
+      <table>
+        <thead><tr><th>文件名</th><th>等级</th><th>类型</th><th>机构</th><th>日期</th><th>产品</th><th>置信度</th></tr></thead>
+        <tbody id="reports-body"><tr><td colspan="7" class="muted">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 打包 -->
+  <section id="tab-pack" class="hidden">
+    <div class="panel">
+      <h2>按订单打包合订本 PDF</h2>
+      <div class="row">
+        <input id="in-order" placeholder="订单号，如 DD261103120159001952" style="width:280px">
+        <span class="muted">或</span>
+        <input id="in-date" placeholder="发货日期 YYYY-MM-DD" style="width:180px">
+        <button class="primary" id="btn-pack">开始打包</button>
+      </div>
+      <div id="pack-log" class="log hidden"></div>
+    </div>
+  </section>
+
+  <!-- 订单记录 -->
+  <section id="tab-orders" class="hidden">
+    <div class="panel">
+      <h2>已打包订单</h2>
+      <table>
+        <thead><tr><th>订单号</th><th>客户</th><th>商品行</th><th>报告数</th><th>异常</th><th>打包时间</th></tr></thead>
+        <tbody id="orders-body"><tr><td colspan="6" class="muted">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  ['dash','reports','pack','orders'].forEach(t =>
+    $('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
+  if (b.dataset.tab === 'reports') loadReports();
+  if (b.dataset.tab === 'orders') loadOrders();
+});
+
+async function loadStats() {
+  const r = await fetch('/api/stats').then(r => r.json());
+  $('#s-reports').textContent = r.reports_total;
+  $('#s-orders').textContent = r.orders_total;
+  $('#s-files').textContent = r.local_files;
+  $('#s-time').textContent = r.time.slice(11);
+  $('#s-lib').textContent = r.library_root;
+  $('#clock').textContent = r.time;
+}
+
+async function loadReports() {
+  const r = await fetch('/api/reports').then(r => r.json());
+  const rows = r.data || [];
+  $('#reports-body').innerHTML = rows.length ? rows.map(x => {
+    const f = x.fields || {};
+    const lv = (f['报告等级'] || ['?'])[0] || '?';
+    return `<tr><td>${f['文件名']||''}</td><td><span class="badge ${lv.slice(0,2)}">${lv}</span></td>
+      <td>${f['报告类型']||''}</td><td>${f['检测机构']||''}</td>
+      <td>${(f['报告日期']||'').slice(0,10)}</td><td>${f['产品SKU']||''}</td>
+      <td>${f['置信度']||''}</td></tr>`;
+  }).join('') : '<tr><td colspan="7" class="muted">暂无数据</td></tr>';
+}
+
+async function loadOrders() {
+  const r = await fetch('/api/orders').then(r => r.json());
+  const rows = r.data || [];
+  $('#orders-body').innerHTML = rows.length ? rows.map(x => {
+    const f = x.fields || {};
+    return `<tr><td>${f['订单号']||''}</td><td>${f['客户']||''}</td>
+      <td>${f['商品行数']||0}</td><td>${f['报告数']||0}</td>
+      <td>${f['异常数']||0}</td><td>${(f['打包时间']||'').slice(0,16)}</td></tr>`;
+  }).join('') : '<tr><td colspan="6" class="muted">暂无打包记录</td></tr>';
+}
+
+$('#btn-pack').onclick = async () => {
+  const order_no = $('#in-order').value.trim();
+  const date = $('#in-date').value.trim();
+  if (!order_no && !date) { alert('请输入订单号或日期'); return; }
+  const btn = $('#btn-pack'); btn.disabled = true; btn.textContent = '打包中...';
+  const log = $('#pack-log'); log.classList.remove('hidden'); log.textContent = '启动任务...';
+  const r = await fetch('/api/pack', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({order_no, date})}).then(r => r.json());
+  const jobId = r.job_id;
+  const poll = setInterval(async () => {
+    const s = await fetch('/api/pack/' + jobId).then(r => r.json());
+    log.textContent = s.log || s.status;
+    if (s.status === 'done' || s.status === 'failed') {
+      clearInterval(poll);
+      btn.disabled = false; btn.textContent = '开始打包';
+      log.textContent = (s.status === 'done' ? '✅ 完成\n' : '❌ 失败\n') + log.textContent;
+      loadStats();
+    }
+  }, 2000);
+};
+
+loadStats();
+setInterval(loadStats, 30000);
+</script>
+</body>
+</html>

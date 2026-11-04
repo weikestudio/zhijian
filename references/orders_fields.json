@@ -1,0 +1,11 @@
+[
+  {"name": "订单号", "type": "text"},
+  {"name": "订单日期", "type": "date"},
+  {"name": "客户", "type": "text"},
+  {"name": "商品行数", "type": "number"},
+  {"name": "报告数", "type": "number"},
+  {"name": "异常数", "type": "number"},
+  {"name": "缺报告商品", "type": "text"},
+  {"name": "合订本路径", "type": "text"},
+  {"name": "打包时间", "type": "datetime"}
+]
