@@ -274,14 +274,27 @@ def upsert_items(order_no: str, index_rows: list[dict]):
 # ---------------- 统计 ----------------
 
 def stats() -> dict:
-    """仪表盘统计"""
-    rep = _cli(["+record-list", "--table-id", T_REPORTS, "--limit", "1", "--format", "json"])
-    ord_ = _cli(["+record-list", "--table-id", T_ORDERS, "--limit", "1", "--format", "json"])
-    def total(d):
-        return (d.get("total") or len(d.get("data") or []) or 0)
+    """仪表盘统计：取全部记录数非空行"""
+    def count_valid(table_id: str) -> int:
+        try:
+            res = _cli(["+record-list", "--table-id", table_id,
+                        "--limit", "200", "--format", "json"])
+            d = res.get("data") or {}
+            fields = d.get("fields") or []
+            rows = d.get("data") or []
+            # 找第一个非空列（如"文件名"）作为有效行判断
+            col_idx = 0
+            for i, f in enumerate(fields):
+                fname = f.get("name") if isinstance(f, dict) else f
+                if fname in ("文件名", "订单号"):
+                    col_idx = i
+                    break
+            return sum(1 for row in rows if row[col_idx] not in (None, "", []))
+        except Exception:
+            return 0
     return {
-        "reports_total": total(rep.get("data", {})),
-        "orders_total": total(ord_.get("data", {})),
+        "reports_total": count_valid(T_REPORTS),
+        "orders_total": count_valid(T_ORDERS),
     }
 
 
