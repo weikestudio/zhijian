@@ -258,7 +258,10 @@ def pack_one(cli, order_stub: dict, outroot: Path, dry_run=False) -> dict:
         order["order_no"] = order_no
     items = det.get("commodity_list") or []
 
-    outdir = outroot / safe_name(order_no)
+    # 输出目录：客户名-配送日期（二级目录）
+    customer = safe_name(order.get("user_name") or "未知客户", 30)
+    delivery_date = (order.get("delivery_date") or date.today().isoformat())[:10]
+    outdir = outroot / f"{customer}-{delivery_date}" / order_no
     repdir = outdir / "reports"
 
     # 1) 逐商品取溯源码 + 报告
@@ -340,29 +343,53 @@ def pack_one(cli, order_stub: dict, outroot: Path, dry_run=False) -> dict:
             if not ok:
                 meta["failed"] = True
 
-    # 3) 合订本：原汁原味拼报告原件，不做封面/目录抬头
+    # 3) 合订本：原汁原味拼报告原件
+    # 果蔬类快检是公共报告，抽出来单独合订（每天一份），不放订单合订本里
     stats = {"items": len(items), "reports": len(file_registry),
              "issues": len(missing), "missing": missing}
+    public_reports = {}  # {日期: [bytes]}  果蔬类公共报告
     if not dry_run:
         outdir.mkdir(parents=True, exist_ok=True)
         parts = []
-        # 只有在有缺报告/异常时，才加一页极简提示（不算抬头，是必要告知）
-        if missing:
-            parts.append(make_alert_page(order, missing))
         for url, meta in file_registry.items():
             if meta.get("failed") or not meta["path"].exists():
                 continue
             p = meta["path"]
-            if p.suffix.lower() == ".pdf":
-                b = p.read_bytes()
+            # 判断是否果蔬类快检（公共报告，每天一份）
+            fname = p.name
+            commodities_str = " ".join(meta.get("commodities", set()))
+            is_veg_quick = (
+                "果蔬类" in fname or "果蔬" in commodities_str
+            )
+            try:
+                b = p.read_bytes() if p.suffix.lower() == ".pdf" else img_to_pdf_bytes(p)
+            except Exception as e:
+                print(f"    转PDF失败 {p.name}: {e}", file=sys.stderr)
+                continue
+            if is_veg_quick:
+                # 收集到公共报告，按检测日期分组
+                d = meta.get("date", "unknown")
+                public_reports.setdefault(d, []).append(b)
             else:
-                try:
-                    b = img_to_pdf_bytes(p)
-                except Exception as e:
-                    print(f"    图片转PDF失败 {p.name}: {e}", file=sys.stderr)
-                    continue
-            parts.append(b)
+                parts.append(b)
         merge_to_pdf(parts, outdir / "订单质检报告合订本.pdf")
+
+        # 果蔬类公共报告每天一份，存在 outroot/_公共报告/
+        if public_reports:
+            pubdir = outroot / "_公共报告"
+            pubdir.mkdir(parents=True, exist_ok=True)
+            for d, pages in public_reports.items():
+                pub_pdf = pubdir / f"果蔬类快检报告_{d}.pdf"
+                merge_to_pdf(pages, pub_pdf)
+                print(f"    ✓ 果蔬类公共报告: {pub_pdf.name}")
+
+        # 异常清单单独放，不放在合订本第一页
+        if missing:
+            alert_dir = outroot / "_异常清单"
+            alert_dir.mkdir(parents=True, exist_ok=True)
+            alert_pdf = alert_dir / f"异常清单_{delivery_date}.pdf"
+            merge_to_pdf([make_alert_page(order, missing)], alert_pdf)
+            print(f"    ⚠ 异常清单: {alert_pdf.name}")
 
         # 4) 索引 CSV
         with open(outdir / "00_索引.csv", "w", newline="", encoding="utf-8-sig") as f:
