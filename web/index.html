@@ -165,15 +165,20 @@ async function loadReports() {
   const fields = r.fields || [];
   const rows = r.data || [];
   const idx = name => fields.indexOf(name);
-  // 过滤全空行
+  // 飞书 select 字段返回数组，统一转字符串
+  const cell = (row, name) => {
+    const v = row[idx(name)];
+    if (Array.isArray(v)) return v[0] || '';
+    return v || '';
+  };
   const valid = rows.filter(row => row.some(v => v !== null && v !== ''));
   $('#reports-body').innerHTML = valid.length ? valid.map(row => {
-    const lv = row[idx('报告等级')] || '?';
-    return `<tr><td>${row[idx('文件名')]||''}</td>
-      <td><span class="badge ${(lv||'').slice(0,2)}">${lv||'?'}</span></td>
-      <td>${row[idx('报告类型')]||''}</td><td>${row[idx('检测机构')]||''}</td>
-      <td>${(row[idx('报告日期')]||'').slice(0,10)}</td>
-      <td>${row[idx('产品SKU')]||''}</td><td>${row[idx('置信度')]||''}</td></tr>`;
+    const lv = cell(row, '报告等级');
+    return `<tr><td>${cell(row,'文件名')}</td>
+      <td><span class="badge ${lv.slice(0,2)}">${lv}</span></td>
+      <td>${cell(row,'报告类型')}</td><td>${cell(row,'检测机构')}</td>
+      <td>${cell(row,'报告日期').slice(0,10)}</td>
+      <td>${cell(row,'产品SKU')}</td><td>${cell(row,'置信度')}</td></tr>`;
   }).join('') : '<tr><td colspan="7" class="muted">暂无数据</td></tr>';
 }
 
