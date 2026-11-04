@@ -11,19 +11,49 @@ sys.path.insert(0, str(ROOT / "lib"))
 
 def cmd_doctor():
     """环境自检"""
-    import shutil
     print(f"仓库目录: {ROOT}")
     print(f"Python:  {sys.version.split()[0]}")
-    for mod in ["yaml", "requests", "pypdf", "pypdfium2", "flask"]:
+    print()
+    print("--- Python 依赖 ---")
+    for mod in ["yaml", "requests", "pypdf", "pypdfium2", "flask", "PIL", "cryptography"]:
         try:
             __import__(mod)
             print(f"  ✓ {mod}")
         except ImportError as e:
             print(f"  ✗ {mod}  ({e})")
+    print()
+    print("--- 本地工具 ---")
     ocr = ROOT / "tools" / "ocr"
-    print(f"OCR 二进制: {'✓' if ocr.exists() else '✗'} ({ocr})")
+    ocr_ok = ocr.exists() and ocr.stat().st_mode & 0o111
+    print(f"  OCR 二进制: {'✓' if ocr_ok else '✗'} ({ocr})")
+    print()
+    print("--- 配置 ---")
     cfg = ROOT / "config.yaml"
-    print(f"配置文件:   {'✓' if cfg.exists() else '✗'} ({cfg})")
+    print(f"  config.yaml: {'✓' if cfg.exists() else '✗'}")
+    if cfg.exists():
+        import yaml
+        c = yaml.safe_load(open(cfg))
+        sdp = c.get("sdp", {})
+        print(f"  SDP appid:   {'✓ 已填' if sdp.get('appid') else '✗ 未填'}")
+        print(f"  SDP secret:  {'✓ 已填' if sdp.get('secret') else '✗ 未填'}")
+        print(f"  归档根目录:  {c.get('storage',{}).get('library_root','')}")
+    print()
+    print("--- 外部连通性 ---")
+    sys.path.insert(0, str(ROOT / "lib"))
+    try:
+        import config
+        import bitable
+        s = bitable.stats()
+        print(f"  飞书多维表格: ✓ (报告库 {s.get('reports_total',0)} 条, 订单 {s.get('orders_total',0)} 条)")
+    except Exception as e:
+        print(f"  飞书多维表格: ✗ ({str(e)[:80]})")
+    try:
+        import sdp_client
+        cli = sdp_client.SdpClient()
+        cli.get_token()
+        print(f"  蔬东坡 API:  ✓ (token 获取成功)")
+    except Exception as e:
+        print(f"  蔬东坡 API:  ✗ ({str(e)[:80]})")
 
 
 def cmd_ingest(args):

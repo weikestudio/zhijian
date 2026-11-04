@@ -297,6 +297,14 @@ def main():
                 dest = dest.with_stem(dest.stem + "_" + rec["哈希"])
                 rec["归档路径"] = str(dest.relative_to(lib))
             shutil.copy2(p, dest)
+            # 如果这次识别成功，清掉 _review/ 里的同名旧文件
+            if not rec["待确认"]:
+                old_review = lib / "_review" / p.name
+                if old_review.exists() and old_review != dest:
+                    try:
+                        old_review.unlink()
+                    except Exception:
+                        pass
 
         records.append(rec)
         print(f"    {rec['报告等级']} {rec['报告类型']:<8} 机构={rec['机构'] or '-':<18} "

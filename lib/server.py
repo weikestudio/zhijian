@@ -112,6 +112,42 @@ def api_ingest():
     })
 
 
+# ---------- 待确认 ----------
+@app.route("/api/review")
+def api_review():
+    """列出 _review/ 下待人工确认的报告"""
+    import csv
+    lib = cfgmod.library_root()
+    review_dir = lib / "_review"
+    files = []
+    if review_dir.exists():
+        for p in sorted(review_dir.glob("*")):
+            if p.is_file():
+                files.append({
+                    "name": p.name,
+                    "size_kb": round(p.stat().st_size / 1024),
+                    "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
+                })
+    # 从 _index.csv 匹配待确认原因
+    idx_csv = lib / "_index.csv"
+    reasons = {}
+    if idx_csv.exists():
+        with open(idx_csv, encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                if row.get("待确认"):
+                    reasons[row.get("源文件", "")] = {
+                        "reason": row["待确认"],
+                        "level": row.get("报告等级", ""),
+                        "product": row.get("产品", ""),
+                    }
+    for f in files:
+        info = reasons.get(f["name"], {})
+        f["reason"] = info.get("reason", "")
+        f["guess_level"] = info.get("level", "")
+        f["product"] = info.get("product", "")
+    return jsonify({"files": files, "count": len(files)})
+
+
 # ---------- 下载合订本 ----------
 @app.route("/api/download/<path:relpath>")
 def api_download(relpath):

@@ -56,6 +56,7 @@
   <button data-tab="reports">报告库</button>
   <button data-tab="pack">按订单打包</button>
   <button data-tab="orders">订单记录</button>
+  <button data-tab="review">待确认</button>
 </nav>
 <main>
 
@@ -112,6 +113,18 @@
     </div>
   </section>
 
+  <!-- 待确认 -->
+  <section id="tab-review" class="hidden">
+    <div class="panel">
+      <h2>待人工确认的报告（OCR 识别置信度低）</h2>
+      <p class="muted" style="margin-bottom:12px">这些文件识别不准，把文件名发给豆包，告诉它正确的等级/机构/日期，会自动重新归档。</p>
+      <table>
+        <thead><tr><th>文件名</th><th>大小</th><th>识别猜测</th><th>待确认原因</th><th>时间</th></tr></thead>
+        <tbody id="review-body"><tr><td colspan="5" class="muted">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
 </main>
 
 <script>
@@ -123,6 +136,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
     $('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
   if (b.dataset.tab === 'reports') loadReports();
   if (b.dataset.tab === 'orders') loadOrders();
+  if (b.dataset.tab === 'review') loadReview();
 });
 
 async function loadStats() {
@@ -146,6 +160,16 @@ async function loadReports() {
       <td>${(f['报告日期']||'').slice(0,10)}</td><td>${f['产品SKU']||''}</td>
       <td>${f['置信度']||''}</td></tr>`;
   }).join('') : '<tr><td colspan="7" class="muted">暂无数据</td></tr>';
+}
+
+async function loadReview() {
+  const r = await fetch('/api/review').then(r => r.json());
+  const rows = r.files || [];
+  $('#review-body').innerHTML = rows.length ? rows.map(f =>
+    `<tr><td>${f.name}</td><td>${f.size_kb}KB</td>
+     <td>${f.guess_level||''} ${f.product||''}</td>
+     <td>${f.reason||''}</td><td>${f.mtime||''}</td></tr>`
+  ).join('') : '<tr><td colspan="5" class="muted">✓ 没有待确认的报告</td></tr>';
 }
 
 async function loadOrders() {
