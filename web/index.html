@@ -162,14 +162,18 @@ async function loadStats() {
 
 async function loadReports() {
   const r = await fetch('/api/reports').then(r => r.json());
+  const fields = r.fields || [];
   const rows = r.data || [];
-  $('#reports-body').innerHTML = rows.length ? rows.map(x => {
-    const f = x.fields || {};
-    const lv = (f['报告等级'] || ['?'])[0] || '?';
-    return `<tr><td>${f['文件名']||''}</td><td><span class="badge ${lv.slice(0,2)}">${lv}</span></td>
-      <td>${f['报告类型']||''}</td><td>${f['检测机构']||''}</td>
-      <td>${(f['报告日期']||'').slice(0,10)}</td><td>${f['产品SKU']||''}</td>
-      <td>${f['置信度']||''}</td></tr>`;
+  const idx = name => fields.indexOf(name);
+  // 过滤全空行
+  const valid = rows.filter(row => row.some(v => v !== null && v !== ''));
+  $('#reports-body').innerHTML = valid.length ? valid.map(row => {
+    const lv = row[idx('报告等级')] || '?';
+    return `<tr><td>${row[idx('文件名')]||''}</td>
+      <td><span class="badge ${(lv||'').slice(0,2)}">${lv||'?'}</span></td>
+      <td>${row[idx('报告类型')]||''}</td><td>${row[idx('检测机构')]||''}</td>
+      <td>${(row[idx('报告日期')]||'').slice(0,10)}</td>
+      <td>${row[idx('产品SKU')]||''}</td><td>${row[idx('置信度')]||''}</td></tr>`;
   }).join('') : '<tr><td colspan="7" class="muted">暂无数据</td></tr>';
 }
 
@@ -185,12 +189,11 @@ async function loadReview() {
 
 async function loadOrders() {
   const r = await fetch('/api/orders').then(r => r.json());
-  const d = r.data || {};
-  const fields = d.fields || [];
-  const rows = d.data || [];
-  // fields 是字段名列表，找列索引
+  const fields = r.fields || [];
+  const rows = r.data || [];
   const idx = name => fields.indexOf(name);
-  $('#orders-body').innerHTML = rows.length ? rows.map(row => {
+  const valid = rows.filter(row => row.some(v => v !== null && v !== ''));
+  $('#orders-body').innerHTML = valid.length ? valid.map(row => {
     const order_no = row[idx('订单号')] || '';
     const customer = row[idx('客户')] || '';
     const items = row[idx('商品行数')] || 0;
