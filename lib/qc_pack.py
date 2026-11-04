@@ -258,10 +258,11 @@ def pack_one(cli, order_stub: dict, outroot: Path, dry_run=False) -> dict:
         order["order_no"] = order_no
     items = det.get("commodity_list") or []
 
-    # 输出目录：客户名-配送日期（二级目录）
+    # 输出目录：客户名 / 配送日期 / 订单号（三级目录）
+    # 送货时先找客户，再看日期，再找订单
     customer = safe_name(order.get("user_name") or "未知客户", 30)
     delivery_date = (order.get("delivery_date") or date.today().isoformat())[:10]
-    outdir = outroot / f"{customer}-{delivery_date}" / order_no
+    outdir = outroot / customer / delivery_date / order_no
     repdir = outdir / "reports"
 
     # 1) 逐商品取溯源码 + 报告
