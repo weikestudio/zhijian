@@ -18,11 +18,30 @@ import bitable
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "web"
+JOBS_FILE = cfgmod.library_root() / "_packed" / "_jobs.json"
 
 app = Flask(__name__, static_folder=str(WEB_DIR), static_url_path="")
 
-# 打包任务状态（简单内存队列）
-PACK_JOBS = {}
+
+# ---------- 任务状态（落盘） ----------
+def _load_jobs():
+    if JOBS_FILE.exists():
+        try:
+            return json.loads(JOBS_FILE.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_jobs(jobs):
+    try:
+        JOBS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        JOBS_FILE.write_text(json.dumps(jobs, ensure_ascii=False, indent=2))
+    except Exception:
+        pass
+
+
+PACK_JOBS = _load_jobs()
 
 
 @app.route("/")
@@ -34,13 +53,36 @@ def index():
 @app.route("/api/stats")
 def api_stats():
     s = bitable.stats()
-    # 本地归档统计
     lib = cfgmod.library_root()
     file_count = sum(1 for _ in lib.rglob("*") if _.is_file()) if lib.exists() else 0
+
+    # 缺报告/过期计数（从商品索引表扫）
+    missing_count = 0
+    expired_count = 0
+    try:
+        items = bitable.list_items(page_size=200)
+        for row in items.get("data") or []:
+            # 状态字段在数组里
+            for cell in (row if isinstance(row, list) else [row]):
+                if isinstance(cell, list):
+                    for v in cell:
+                        if v == "无报告":
+                            missing_count += 1
+                        elif v == "报告过期":
+                            expired_count += 1
+    except Exception:
+        pass
+
+    review_dir = lib / "_review"
+    review_count = len(list(review_dir.glob("*"))) if review_dir.exists() else 0
+
     return jsonify({
         "reports_total": s.get("reports_total", 0),
         "orders_total": s.get("orders_total", 0),
         "local_files": file_count,
+        "missing_count": missing_count,
+        "expired_count": expired_count,
+        "review_count": review_count,
         "library_root": str(lib),
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     })
@@ -77,7 +119,9 @@ def api_pack():
         cmd += ["--date", date]
 
     def run():
-        PACK_JOBS[job_id] = {"status": "running", "start": datetime.now().isoformat(), "log": ""}
+        PACK_JOBS[job_id] = {"status": "running", "start": datetime.now().isoformat(),
+                             "log": "", "target": order_no or date}
+        _save_jobs(PACK_JOBS)
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=600, cwd=str(ROOT))
             PACK_JOBS[job_id].update({
@@ -87,6 +131,7 @@ def api_pack():
             })
         except Exception as e:
             PACK_JOBS[job_id].update({"status": "failed", "log": str(e)})
+        _save_jobs(PACK_JOBS)
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"ok": True, "job_id": job_id})
@@ -95,6 +140,13 @@ def api_pack():
 @app.route("/api/pack/<job_id>")
 def api_pack_status(job_id):
     return jsonify(PACK_JOBS.get(job_id, {"status": "unknown"}))
+
+
+@app.route("/api/jobs")
+def api_jobs():
+    """历史打包任务列表"""
+    jobs = sorted(PACK_JOBS.items(), key=lambda x: x[1].get("start", ""), reverse=True)
+    return jsonify([{"job_id": k, **v} for k, v in jobs[:20]])
 
 
 # ---------- 入库 ----------
@@ -115,7 +167,6 @@ def api_ingest():
 # ---------- 待确认 ----------
 @app.route("/api/review")
 def api_review():
-    """列出 _review/ 下待人工确认的报告"""
     import csv
     lib = cfgmod.library_root()
     review_dir = lib / "_review"
@@ -128,7 +179,6 @@ def api_review():
                     "size_kb": round(p.stat().st_size / 1024),
                     "mtime": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
                 })
-    # 从 _index.csv 匹配待确认原因
     idx_csv = lib / "_index.csv"
     reasons = {}
     if idx_csv.exists():
@@ -148,7 +198,7 @@ def api_review():
     return jsonify({"files": files, "count": len(files)})
 
 
-# ---------- 下载合订本 ----------
+# ---------- 下载/预览合订本 ----------
 @app.route("/api/download/<path:relpath>")
 def api_download(relpath):
     root = cfgmod.pack_out_dir()
@@ -156,6 +206,16 @@ def api_download(relpath):
     if not str(fp).startswith(str(root.resolve())) or not fp.exists():
         return "not found", 404
     return send_file(fp)
+
+
+@app.route("/api/preview/<order_no>")
+def api_preview(order_no):
+    """在线预览订单合订本 PDF"""
+    root = cfgmod.pack_out_dir()
+    fp = root / order_no / "订单质检报告合订本.pdf"
+    if not fp.exists():
+        return "not found", 404
+    return send_file(fp, mimetype="application/pdf")
 
 
 def run(argv=None):

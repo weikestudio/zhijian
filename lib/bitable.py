@@ -203,6 +203,12 @@ def list_orders(page_size: int = 50) -> dict:
     return res.get("data", {})
 
 
+def list_items(page_size: int = 200) -> dict:
+    res = _cli(["+record-list", "--table-id", T_ITEMS,
+                "--limit", str(page_size), "--format", "json"])
+    return res.get("data", {})
+
+
 # ---------------- 订单商品索引 ----------------
 
 def upsert_items(order_no: str, index_rows: list[dict]):

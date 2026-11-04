@@ -68,12 +68,16 @@ def pdf_text(path: Path) -> str:
 def image_text(path: Path) -> str:
     if not OCR_BIN.exists():
         return ""
-    try:
-        r = subprocess.run([str(OCR_BIN), str(path)], capture_output=True, timeout=120)
-        return r.stdout.decode("utf-8", "replace")
-    except Exception as e:
-        print(f"    OCR 失败 {path.name}: {e}", file=sys.stderr)
-        return ""
+    for attempt in range(2):  # 失败重试一次
+        try:
+            r = subprocess.run([str(OCR_BIN), str(path)], capture_output=True, timeout=120)
+            text = r.stdout.decode("utf-8", "replace")
+            if len(text.strip()) >= 20:
+                return text
+            # 第一次太短，重试一次
+        except Exception as e:
+            print(f"    OCR 失败({attempt+1}/2) {path.name}: {e}", file=sys.stderr)
+    return text if 'text' in dir() else ""
 
 
 def to_image(path: Path, tmpdir: Path) -> Path | None:

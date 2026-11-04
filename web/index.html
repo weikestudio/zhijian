@@ -63,17 +63,25 @@
   <!-- 仪表盘 -->
   <section id="tab-dash">
     <div class="cards">
-      <div class="card"><div class="num" id="s-reports">-</div><div class="label">多维表格报告数</div></div>
-      <div class="card"><div class="num" id="s-orders">-</div><div class="label">已打包订单数</div></div>
-      <div class="card"><div class="num" id="s-files">-</div><div class="label">本地归档文件</div></div>
+      <div class="card"><div class="num" id="s-reports">-</div><div class="label">报告库</div></div>
+      <div class="card"><div class="num" id="s-orders">-</div><div class="label">已打包订单</div></div>
+      <div class="card"><div class="num" id="s-files">-</div><div class="label">本地文件</div></div>
       <div class="card"><div class="num" id="s-time">-</div><div class="label">当前时间</div></div>
+    </div>
+    <div class="cards" style="grid-template-columns: repeat(3, 1fr); margin-top:12px">
+      <div class="card" style="border-left: 4px solid #e5534b">
+        <div class="num" id="s-missing" style="color:#e5534b">-</div><div class="label">缺报告商品</div>
+      </div>
+      <div class="card" style="border-left: 4px solid #d68a1a">
+        <div class="num" id="s-expired" style="color:#d68a1a">-</div><div class="label">报告过期</div>
+      </div>
+      <div class="card" style="border-left: 4px solid #8b5cf6">
+        <div class="num" id="s-review" style="color:#8b5cf6">-</div><div class="label">待确认</div>
+      </div>
     </div>
     <div class="panel">
       <h2>系统状态</h2>
       <p class="muted">归档根目录: <code id="s-lib">-</code></p>
-      <p class="muted" style="margin-top:8px">
-        触发方式: ① 把图片/PDF 拖给豆包自动入库; ② 下方输入订单号一键打包; ③ 每日早 6 点自动跑。
-      </p>
     </div>
   </section>
 
@@ -107,8 +115,8 @@
     <div class="panel">
       <h2>已打包订单</h2>
       <table>
-        <thead><tr><th>订单号</th><th>客户</th><th>商品行</th><th>报告数</th><th>异常</th><th>打包时间</th></tr></thead>
-        <tbody id="orders-body"><tr><td colspan="6" class="muted">加载中...</td></tr></tbody>
+        <thead><tr><th>订单号</th><th>客户</th><th>商品行</th><th>报告数</th><th>异常</th><th>打包时间</th><th>操作</th></tr></thead>
+        <tbody id="orders-body"><tr><td colspan="7" class="muted">加载中...</td></tr></tbody>
       </table>
     </div>
   </section>
@@ -146,6 +154,9 @@ async function loadStats() {
   $('#s-files').textContent = r.local_files;
   $('#s-time').textContent = r.time.slice(11);
   $('#s-lib').textContent = r.library_root;
+  $('#s-missing').textContent = r.missing_count || 0;
+  $('#s-expired').textContent = r.expired_count || 0;
+  $('#s-review').textContent = r.review_count || 0;
   $('#clock').textContent = r.time;
 }
 
@@ -174,13 +185,25 @@ async function loadReview() {
 
 async function loadOrders() {
   const r = await fetch('/api/orders').then(r => r.json());
-  const rows = r.data || [];
-  $('#orders-body').innerHTML = rows.length ? rows.map(x => {
-    const f = x.fields || {};
-    return `<tr><td>${f['订单号']||''}</td><td>${f['客户']||''}</td>
-      <td>${f['商品行数']||0}</td><td>${f['报告数']||0}</td>
-      <td>${f['异常数']||0}</td><td>${(f['打包时间']||'').slice(0,16)}</td></tr>`;
-  }).join('') : '<tr><td colspan="6" class="muted">暂无打包记录</td></tr>';
+  const d = r.data || {};
+  const fields = d.fields || [];
+  const rows = d.data || [];
+  // fields 是字段名列表，找列索引
+  const idx = name => fields.indexOf(name);
+  $('#orders-body').innerHTML = rows.length ? rows.map(row => {
+    const order_no = row[idx('订单号')] || '';
+    const customer = row[idx('客户')] || '';
+    const items = row[idx('商品行数')] || 0;
+    const reports = row[idx('报告数')] || 0;
+    const issues = row[idx('异常数')] || 0;
+    const time = (row[idx('打包时间')] || '').slice(0,16);
+    return `<tr><td>${order_no}</td><td>${customer}</td>
+      <td>${items}</td><td>${reports}</td>
+      <td style="color:${issues>0?'#e5534b':'#166534'}">${issues}</td>
+      <td>${time}</td>
+      <td><a href="/api/preview/${order_no}" target="_blank" style="color:#1f6feb">预览</a>
+          · <a href="/api/download/${order_no}/订单质检报告合订本.pdf" style="color:#1f6feb">下载</a></td></tr>`;
+  }).join('') : '<tr><td colspan="7" class="muted">暂无打包记录</td></tr>';
 }
 
 $('#btn-pack').onclick = async () => {
