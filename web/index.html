@@ -18,7 +18,9 @@
   main { padding: 24px; max-width: 1200px; margin: 0 auto; }
   .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
   .card { background: #fff; padding: 20px; border-radius: 8px;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+          box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor: pointer;
+          transition: transform 0.1s, box-shadow 0.1s; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
   .card .num { font-size: 28px; font-weight: 600; color: #1f6feb; }
   .card .label { color: #888; margin-top: 4px; }
   .panel { background: #fff; border-radius: 8px; padding: 20px;
@@ -54,6 +56,7 @@
 <nav>
   <button class="active" data-tab="dash">仪表盘</button>
   <button data-tab="reports">报告库</button>
+  <button data-tab="issues">异常明细</button>
   <button data-tab="pack">按订单打包</button>
   <button data-tab="orders">订单记录</button>
   <button data-tab="review">待确认</button>
@@ -63,25 +66,26 @@
   <!-- 仪表盘 -->
   <section id="tab-dash">
     <div class="cards">
-      <div class="card"><div class="num" id="s-reports">-</div><div class="label">报告库</div></div>
-      <div class="card"><div class="num" id="s-orders">-</div><div class="label">已打包订单</div></div>
-      <div class="card"><div class="num" id="s-files">-</div><div class="label">本地文件</div></div>
+      <div class="card" onclick="switchTab('reports')"><div class="num" id="s-reports">-</div><div class="label">报告库 →</div></div>
+      <div class="card" onclick="switchTab('orders')"><div class="num" id="s-orders">-</div><div class="label">已打包订单 →</div></div>
+      <div class="card" onclick="openFolder('')"><div class="num" id="s-files">-</div><div class="label">本地文件 →</div></div>
       <div class="card"><div class="num" id="s-time">-</div><div class="label">当前时间</div></div>
     </div>
     <div class="cards" style="grid-template-columns: repeat(3, 1fr); margin-top:12px">
-      <div class="card" style="border-left: 4px solid #e5534b">
-        <div class="num" id="s-missing" style="color:#e5534b">-</div><div class="label">缺报告商品</div>
+      <div class="card" style="border-left: 4px solid #e5534b" onclick="loadIssues('missing'); switchTab('issues')">
+        <div class="num" id="s-missing" style="color:#e5534b">-</div><div class="label">缺报告商品 →</div>
       </div>
-      <div class="card" style="border-left: 4px solid #d68a1a">
-        <div class="num" id="s-expired" style="color:#d68a1a">-</div><div class="label">报告过期</div>
+      <div class="card" style="border-left: 4px solid #d68a1a" onclick="loadIssues('expired'); switchTab('issues')">
+        <div class="num" id="s-expired" style="color:#d68a1a">-</div><div class="label">报告过期 →</div>
       </div>
-      <div class="card" style="border-left: 4px solid #8b5cf6">
-        <div class="num" id="s-review" style="color:#8b5cf6">-</div><div class="label">待确认</div>
+      <div class="card" style="border-left: 4px solid #8b5cf6" onclick="switchTab('review')">
+        <div class="num" id="s-review" style="color:#8b5cf6">-</div><div class="label">待确认 →</div>
       </div>
     </div>
     <div class="panel">
       <h2>系统状态</h2>
-      <p class="muted">归档根目录: <code id="s-lib">-</code></p>
+      <p class="muted">归档根目录: <code id="s-lib">-</code>
+        · <a href="#" onclick="openFolder(''); return false;" style="color:#1f6feb">打开文件夹</a></p>
     </div>
   </section>
 
@@ -92,6 +96,22 @@
       <table>
         <thead><tr><th>文件名</th><th>等级</th><th>类型</th><th>机构</th><th>日期</th><th>产品</th><th>置信度</th></tr></thead>
         <tbody id="reports-body"><tr><td colspan="7" class="muted">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 异常明细 -->
+  <section id="tab-issues" class="hidden">
+    <div class="panel">
+      <h2>异常明细（缺报告 / 过期）</h2>
+      <div class="row" style="margin-bottom:12px">
+        <button class="primary" onclick="loadIssues('')" style="margin:0">全部</button>
+        <button class="primary" onclick="loadIssues('missing')" style="margin-left:8px;background:#e5534b">缺报告</button>
+        <button class="primary" onclick="loadIssues('expired')" style="margin-left:8px;background:#d68a1a">过期</button>
+      </div>
+      <table>
+        <thead><tr><th>订单号</th><th>客户</th><th>商品</th><th>状态</th><th>报告文件</th><th>操作</th></tr></thead>
+        <tbody id="issues-body"><tr><td colspan="6" class="muted">加载中...</td></tr></tbody>
       </table>
     </div>
   </section>
@@ -137,15 +157,39 @@
 
 <script>
 const $ = s => document.querySelector(s);
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('nav button').forEach(x => x.classList.remove('active'));
-  b.classList.add('active');
-  ['dash','reports','pack','orders'].forEach(t =>
-    $('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
-  if (b.dataset.tab === 'reports') loadReports();
-  if (b.dataset.tab === 'orders') loadOrders();
-  if (b.dataset.tab === 'review') loadReview();
-});
+const TABS = ['dash','reports','issues','pack','orders','review'];
+
+function switchTab(name) {
+  document.querySelectorAll('nav button').forEach(x => {
+    x.classList.toggle('active', x.dataset.tab === name);
+    $('#tab-' + x.dataset.tab).classList.toggle('hidden', x.dataset.tab !== name);
+  });
+  if (name === 'reports') loadReports();
+  if (name === 'orders') loadOrders();
+  if (name === 'review') loadReview();
+  if (name === 'issues' && !$('#issues-body').dataset.loaded) loadIssues('');
+}
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+
+async function openFolder(relPath) {
+  await fetch('/api/open-folder?path=' + encodeURIComponent(relPath));
+}
+
+async function loadIssues(status) {
+  $('#issues-body').dataset.loaded = '1';
+  $('#issues-body').innerHTML = '<tr><td colspan="6" class="muted">加载中...</td></tr>';
+  const r = await fetch('/api/issues?status=' + status).then(r => r.json());
+  const items = r.items || [];
+  $('#issues-body').innerHTML = items.length ? items.map(it => {
+    const color = it.status.includes('过期') ? '#d68a1a' : '#e5534b';
+    return `<tr><td>${it.order_no}</td><td>${it.customer}</td>
+      <td>${it.product}</td>
+      <td style="color:${color};font-weight:500">${it.status}</td>
+      <td class="muted">${it.report || '-'}</td>
+      <td><a href="#" onclick="openFolder('');return false;" style="color:#1f6feb">打开文件夹</a></td></tr>`;
+  }).join('') : '<tr><td colspan="6" class="muted">✓ 没有异常</td></tr>';
+}
 
 async function loadStats() {
   const r = await fetch('/api/stats').then(r => r.json());
@@ -210,7 +254,7 @@ async function loadOrders() {
       <td style="color:${issues>0?'#e5534b':'#166534'}">${issues}</td>
       <td>${time}</td>
       <td><a href="/api/preview/${order_no}" target="_blank" style="color:#1f6feb">预览</a>
-          · <a href="/api/download/${order_no}/订单质检报告合订本.pdf" style="color:#1f6feb">下载</a></td></tr>`;
+          · <a href="#" onclick="openFolder('${customer}');return false;" style="color:#1f6feb">文件夹</a></td></tr>`;
   }).join('') : '<tr><td colspan="7" class="muted">暂无打包记录</td></tr>';
 }
 

@@ -210,12 +210,82 @@ def api_download(relpath):
 
 @app.route("/api/preview/<order_no>")
 def api_preview(order_no):
-    """在线预览订单合订本 PDF"""
+    """在线预览订单合订本 PDF（三级目录：客户/日期/订单号）"""
     root = cfgmod.pack_out_dir()
-    fp = root / order_no / "订单质检报告合订本.pdf"
-    if not fp.exists():
-        return "not found", 404
-    return send_file(fp, mimetype="application/pdf")
+    # 递归找订单号目录
+    for fp in root.rglob(f"{order_no}/订单质检报告合订本.pdf"):
+        if fp.exists():
+            return send_file(fp, mimetype="application/pdf")
+    return "not found", 404
+
+
+# ---------- 异常明细 ----------
+@app.route("/api/issues")
+def api_issues():
+    """缺报告/过期的商品明细，从商品索引表扫"""
+    status_filter = request.args.get("status", "")  # missing | expired | ""
+    try:
+        items = bitable.list_items(page_size=500)
+        fields = items.get("fields") or []
+        rows = items.get("data") or []
+        idx = lambda name: fields.index(name) if name in fields else -1
+        order_idx = idx("订单号")
+        product_idx = idx("商品名称")
+        status_idx = idx("状态")
+        report_idx = idx("报告文件")
+        customer_idx = idx("客户")
+
+        result = []
+        for row in rows:
+            if not isinstance(row, list):
+                continue
+            # 状态字段是数组
+            status_cell = row[status_idx] if status_idx >= 0 else []
+            status_val = ""
+            if isinstance(status_cell, list) and status_cell:
+                status_val = str(status_cell[0])
+            elif isinstance(status_cell, str):
+                status_val = status_cell
+
+            if status_filter == "missing" and "无报告" not in status_val:
+                continue
+            if status_filter == "expired" and "过期" not in status_val:
+                continue
+            if not status_filter and "正常" in status_val:
+                continue
+
+            result.append({
+                "order_no": row[order_idx] if order_idx >= 0 else "",
+                "customer": row[customer_idx] if customer_idx >= 0 else "",
+                "product": row[product_idx] if product_idx >= 0 else "",
+                "status": status_val,
+                "report": row[report_idx] if report_idx >= 0 else "",
+            })
+        return jsonify({"total": len(result), "items": result[:200]})
+    except Exception as e:
+        return jsonify({"total": 0, "items": [], "error": str(e)}), 200
+
+
+# ---------- 打开本地文件夹 ----------
+@app.route("/api/open-folder")
+def api_open_folder():
+    """调用系统 open 命令打开本地文件夹（macOS/Windows）"""
+    rel = request.args.get("path", "").strip()
+    lib = cfgmod.library_root()
+    if not rel:
+        target = lib / "_packed"
+    else:
+        target = (lib / rel).resolve()
+        # 安全检查：必须在 library 根目录下
+        if not str(target).startswith(str(lib.resolve())):
+            return jsonify({"ok": False, "error": "路径越界"}), 400
+    if not target.exists():
+        return jsonify({"ok": False, "error": f"目录不存在: {target}"}), 404
+    try:
+        subprocess.Popen(["open", str(target)])
+        return jsonify({"ok": True, "path": str(target)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 def run(argv=None):
