@@ -31,10 +31,28 @@ else
   echo "  ⚠ 非 macOS 或无 swiftc，跳过 OCR 编译，将使用 RapidOCR"
 fi
 
-# 4. 配置文件
+# 4. 配置文件（自动生成 + 交互式填入）
 if [ ! -f config.yaml ]; then
   cp config.example.yaml config.yaml
-  echo "✓ 已生成 config.yaml（请填入真实 appid/secret）"
+  echo ""
+  echo "==> 配置蔬东坡 API（按回车跳过，稍后手动改 config.yaml）"
+  read -p "  蔬东坡 appid: " appid
+  read -p "  蔬东坡 secret: " secret
+  read -p "  蔬东坡 project_code [cc_xdsl]: " pcode
+  pcode=${pcode:-cc_xdsl}
+  if [ -n "$appid" ]; then
+    python3 -c "
+import yaml
+c = yaml.safe_load(open('config.yaml'))
+c['sdp']['appid'] = '$appid'
+c['sdp']['secret'] = '$secret'
+c['sdp']['project_code'] = '$pcode'
+yaml.dump(c, open('config.yaml', 'w'), allow_unicode=True)
+print('  ✓ config.yaml 已写入')
+"
+  else
+    echo "  ⚠ 已生成 config.yaml 模板，请手动填入 appid/secret"
+  fi
 else
   echo "✓ config.yaml 已存在，跳过"
 fi

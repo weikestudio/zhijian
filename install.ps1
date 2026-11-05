@@ -29,10 +29,28 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "✓ Python 依赖已安装"
 
-# 3. 配置文件
+# 3. 配置文件（自动生成 + 交互式填入）
 if (-not (Test-Path "config.yaml")) {
     Copy-Item "config.example.yaml" "config.yaml"
-    Write-Host "✓ 已生成 config.yaml（请填入真实 appid/secret）" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "==> 配置蔬东坡 API（按回车跳过，稍后手动改 config.yaml）" -ForegroundColor Cyan
+    $appid = Read-Host "  蔬东坡 appid"
+    $secret = Read-Host "  蔬东坡 secret"
+    $pcode = Read-Host "  蔬东坡 project_code [cc_xdsl]"
+    if ([string]::IsNullOrEmpty($pcode)) { $pcode = "cc_xdsl" }
+    if (-not [string]::IsNullOrEmpty($appid)) {
+        & $pythonCmd.Source -c @"
+import yaml
+c = yaml.safe_load(open('config.yaml'))
+c['sdp']['appid'] = '$appid'
+c['sdp']['secret'] = '$secret'
+c['sdp']['project_code'] = '$pcode'
+yaml.dump(c, open('config.yaml', 'w'), allow_unicode=True)
+print('  ✓ config.yaml 已写入')
+"@
+    } else {
+        Write-Host "  ⚠ 已生成 config.yaml 模板，请手动填入 appid/secret" -ForegroundColor Yellow
+    }
 } else {
     Write-Host "✓ config.yaml 已存在，跳过"
 }
