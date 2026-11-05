@@ -263,7 +263,9 @@ def pack_one(cli, order_stub: dict, outroot: Path, dry_run=False) -> dict:
     customer = safe_name(order.get("user_name") or "未知客户", 30)
     delivery_date = (order.get("delivery_date") or date.today().isoformat())[:10]
     outdir = outroot / customer / delivery_date / order_no
-    repdir = outdir / "reports"
+    # 报告文件存公共目录 _reports/（按 URL 哈希去重，不每个订单重复存）
+    # 订单目录里只留合订本 PDF + 索引 CSV，省空间
+    repdir = outroot / "_reports"
 
     # 1) 逐商品取溯源码 + 报告
     file_registry: dict[str, dict] = {}   # url -> {path, commodities:set, org, date, ...}
@@ -319,13 +321,13 @@ def pack_one(cli, order_stub: dict, outroot: Path, dry_run=False) -> dict:
             url = f["url"]
             if url not in file_registry:
                 ext = ".pdf" if ("pdf" in url.lower() or f["kind"] in ("pdf", "factory")) else ".png"
-                base = safe_name(f.get("name") or f"{name}_{main.get('inspect_date') or ''}", 50)
+                # 用 URL 哈希做文件名，确保同一个报告只存一份
+                url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+                base = safe_name(f.get("name") or f"{name}_{main.get('inspect_date') or ''}", 40)
                 if not base.lower().endswith(ext):
                     base += ext
-                path = repdir / base
-                # 同名不同 URL 时加短哈希
-                if path.exists():
-                    path = repdir / f"{path.stem}_{hashlib.md5(url.encode()).hexdigest()[:6]}{ext}"
+                # 格式: 哈希_文件名.pdf
+                path = repdir / f"{url_hash}_{base}"
                 file_registry[url] = {
                     "path": path, "commodities": {name}, "org": f.get("inspect_org", ""),
                     "date": f.get("inspect_date", ""), "kind": f["kind"], "url": url,
