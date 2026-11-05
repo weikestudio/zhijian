@@ -37,16 +37,16 @@ if (-not (Test-Path "config.yaml")) {
     Write-Host "✓ config.yaml 已存在，跳过"
 }
 
-# 4. 建归档目录（跨平台默认路径）
-$libraryRoot = "$env:USERPROFILE\Vonework\library"
-$packOut = "$libraryRoot\_packed"
-$inboxDir = "$env:USERPROFILE\Downloads\供应商报告"
-foreach ($d in @($libraryRoot, $packOut, $inboxDir)) {
-    if (-not (Test-Path $d)) {
-        New-Item -ItemType Directory -Force -Path $d | Out-Null
-    }
-}
-Write-Host "✓ 归档目录: $libraryRoot"
+# 4. 建归档目录（从 config.yaml 读）
+Write-Host "==> 创建归档目录..."
+& $pythonCmd.Source -c @"
+import yaml, os
+c = yaml.safe_load(open('config.yaml'))
+for k in ['library_root', 'inbox_dir', 'pack_out_dir']:
+    p = os.path.expanduser(c['storage'][k].replace('/', os.sep))
+    os.makedirs(p, exist_ok=True)
+    print(f'  ✓ {k}: {p}')
+"@
 
 # 5. 测试 OCR（RapidOCR 首次会自动下载模型）
 Write-Host "==> 测试 OCR 引擎（首次会下载模型，约 15MB）..."

@@ -16,22 +16,20 @@ fi
 PYVER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 echo "✓ Python $PYVER  ($(which python3))"
 
-# 2. 装依赖（优先用 workbuddy 解释器，没有就用系统 python3 -m pip --user）
-PIP=""
-if [ -x "/Users/v1/.workbuddy/binaries/python/envs/default/bin/python" ]; then
-  PIP="/Users/v1/.workbuddy/binaries/python/envs/default/bin/python -m pip"
-else
-  PIP="python3 -m pip --user"
-fi
+# 2. 装依赖
 echo "==> 安装 Python 依赖..."
-$PIP install -q -r requirements.txt
+python3 -m pip install --user -q -r requirements.txt
 
-# 3. 编译 OCR（macOS Vision）
-if [ ! -x tools/ocr ] || [ tools/ocr.swift -nt tools/ocr ]; then
-  echo "==> 编译 OCR (tools/ocr)..."
-  (cd tools && swiftc -O ocr.swift -o ocr)
+# 3. 编译 OCR（仅 macOS 有 swiftc 时）
+if [[ "$OSTYPE" == "darwin"* ]] && command -v swiftc >/dev/null 2>&1; then
+  if [ ! -x tools/ocr ] || [ tools/ocr.swift -nt tools/ocr ]; then
+    echo "==> 编译 OCR (tools/ocr)..."
+    (cd tools && swiftc -O ocr.swift -o ocr)
+  fi
+  echo "✓ tools/ocr (macOS Vision)"
+else
+  echo "  ⚠ 非 macOS 或无 swiftc，跳过 OCR 编译，将使用 RapidOCR"
 fi
-echo "✓ tools/ocr"
 
 # 4. 配置文件
 if [ ! -f config.yaml ]; then
@@ -42,10 +40,17 @@ else
 fi
 
 # 5. 建归档根目录
-python3 -c "import yaml; c=yaml.safe_load(open('config.yaml')); import os; os.makedirs(c['storage']['library_root'], exist_ok=True); os.makedirs(c['storage']['pack_out_dir'], exist_ok=True)"
+python3 -c "
+import yaml, os
+c = yaml.safe_load(open('config.yaml'))
+for k in ['library_root', 'inbox_dir', 'pack_out_dir']:
+    p = os.path.expanduser(c['storage'][k])
+    os.makedirs(p, exist_ok=True)
+    print(f'  ✓ {k}: {p}')
+"
 
-# 6. 豆包 Skill 软链
-USER_SKILLS="/Users/v1/Library/Application Support/DoubaoWork/Default/.doubaowork/agent_mode/workspace/.user_skills"
+# 6. 豆包 Skill 软链（如果存在豆包目录）
+USER_SKILLS="$HOME/Library/Application Support/DoubaoWork/Default/.doubaowork/agent_mode/workspace/.user_skills"
 if [ -d "$USER_SKILLS" ]; then
   ln -sfn "$REPO_DIR" "$USER_SKILLS/qc-report-keeper"
   echo "✓ 已在 .user_skills/ 下软链接 qc-report-keeper"
@@ -53,6 +58,6 @@ fi
 
 echo ""
 echo "✅ 安装完成"
-echo "   启动工作台:  ./bin/qc serve"
-echo "   环境自检:    ./bin/qc doctor"
+echo "   启动工作台:  python3 bin/qc serve"
+echo "   环境自检:    python3 bin/qc doctor"
 echo "   配置文件:    $REPO_DIR/config.yaml"
