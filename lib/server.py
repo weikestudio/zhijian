@@ -228,8 +228,9 @@ def api_preview(order_no):
 # ---------- 异常明细 ----------
 @app.route("/api/issues")
 def api_issues():
-    """缺报告/过期的商品明细。优先从本地索引 CSV 读（快），飞书作为补充。"""
+    """缺报告/过期的商品明细。从本地索引 CSV 扫描。"""
     status_filter = request.args.get("status", "")  # missing | expired | ""
+    date_filter = request.args.get("date", "")  # YYYY-MM-DD，空 = 全部
 
     # 从本地所有 00_索引.csv 扫描
     import csv
@@ -240,13 +241,16 @@ def api_issues():
     if packed.exists():
         for idx_csv in packed.rglob("*/**/00_索引.csv"):
             # 从路径解析客户和日期: 客户名/日期/订单号/00_索引.csv
-            parts = idx_csv.parts
             order_dir = idx_csv.parent
             date_dir = order_dir.parent
             customer_dir = date_dir.parent
             customer = customer_dir.name if customer_dir != packed else ""
             delivery_date = date_dir.name if date_dir != packed else ""
             order_no = order_dir.name
+
+            # 日期过滤
+            if date_filter and delivery_date != date_filter:
+                continue
 
             try:
                 with open(idx_csv, encoding="utf-8-sig") as f:

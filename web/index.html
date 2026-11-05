@@ -120,6 +120,10 @@
         <button class="primary" onclick="loadIssues('')" style="margin:0">全部</button>
         <button class="primary" onclick="loadIssues('missing')" style="margin-left:8px;background:#e5534b">缺报告</button>
         <button class="primary" onclick="loadIssues('expired')" style="margin-left:8px;background:#d68a1a">过期</button>
+        <label style="margin-left:16px;display:flex;align-items:center;gap:6px">
+          日期
+          <input type="date" id="issues-date" style="width:150px" onchange="loadIssues(document.querySelector('#issues-body').dataset.filter || '')">
+        </label>
       </div>
       <table>
         <thead><tr><th>订单号</th><th>客户</th><th>商品</th><th>状态</th><th>报告文件</th><th>操作</th></tr></thead>
@@ -202,7 +206,8 @@ async function loadIssues(status) {
   $('#issues-body').dataset.loaded = '1';
   $('#issues-body').dataset.filter = status;
   $('#issues-body').innerHTML = '<tr><td colspan="6" class="muted">加载中...</td></tr>';
-  const r = await fetch('/api/issues?status=' + status).then(r => r.json());
+  const date = $('#issues-date').value;
+  const r = await fetch('/api/issues?status=' + status + '&date=' + date).then(r => r.json());
   if (r.error) {
     $('#issues-body').innerHTML = `<tr><td colspan="6" class="muted" style="color:#e5534b">⚠ ${r.error.slice(0,100)}</td></tr>`;
     return;
@@ -214,7 +219,7 @@ async function loadIssues(status) {
       <td>${it.product}</td>
       <td style="color:${color};font-weight:500">${it.status}</td>
       <td class="muted">${it.report || '-'}</td>
-      <td><a href="#" onclick="openFolder('');return false;" style="color:#1f6feb">打开文件夹</a></td></tr>`;
+      <td><a href="#" onclick="openFolder('${it.customer}');return false;" style="color:#1f6feb">打开文件夹</a></td></tr>`;
   }).join('') : '<tr><td colspan="6" class="muted">✓ 没有异常</td></tr>';
 }
 
@@ -317,6 +322,7 @@ $('#btn-refresh').onclick = async () => {
 
 // 默认填今天日期
 $('#in-date').valueAsDate = new Date();
+$('#issues-date').valueAsDate = new Date();
 
 // 自动刷新倒计时
 let countdown = 60;
