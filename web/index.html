@@ -46,6 +46,12 @@
   .row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
   .hidden { display: none; }
   .muted { color: #888; font-size: 12px; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .panel-head h2 { margin: 0; }
+  .btn-refresh { background: #f3f4f6; border: 1px solid #d1d5db; padding: 4px 12px;
+                  border-radius: 6px; cursor: pointer; font-size: 12px; color: #555; }
+  .btn-refresh:hover { background: #e5e7eb; }
+  .countdown { font-size: 12px; color: #888; margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -92,7 +98,10 @@
   <!-- 报告库 -->
   <section id="tab-reports" class="hidden">
     <div class="panel">
-      <h2>报告库（来自飞书多维表格）</h2>
+      <div class="panel-head">
+        <h2>报告库（来自飞书多维表格）</h2>
+        <button class="btn-refresh" onclick="loadReports()">刷新</button>
+      </div>
       <table>
         <thead><tr><th>文件名</th><th>等级</th><th>类型</th><th>机构</th><th>日期</th><th>产品</th><th>置信度</th></tr></thead>
         <tbody id="reports-body"><tr><td colspan="7" class="muted">加载中...</td></tr></tbody>
@@ -103,7 +112,10 @@
   <!-- 异常明细 -->
   <section id="tab-issues" class="hidden">
     <div class="panel">
-      <h2>异常明细（缺报告 / 过期）</h2>
+      <div class="panel-head">
+        <h2>异常明细（缺报告 / 过期）</h2>
+        <button class="btn-refresh" onclick="loadIssues(document.querySelector('#issues-body').dataset.filter || '')">刷新</button>
+      </div>
       <div class="row" style="margin-bottom:12px">
         <button class="primary" onclick="loadIssues('')" style="margin:0">全部</button>
         <button class="primary" onclick="loadIssues('missing')" style="margin-left:8px;background:#e5534b">缺报告</button>
@@ -137,7 +149,10 @@
   <!-- 订单记录 -->
   <section id="tab-orders" class="hidden">
     <div class="panel">
-      <h2>已打包订单</h2>
+      <div class="panel-head">
+        <h2>已打包订单</h2>
+        <button class="btn-refresh" onclick="loadOrders()">刷新</button>
+      </div>
       <table>
         <thead><tr><th>订单号</th><th>客户</th><th>商品行</th><th>报告数</th><th>异常</th><th>打包时间</th><th>操作</th></tr></thead>
         <tbody id="orders-body"><tr><td colspan="7" class="muted">加载中...</td></tr></tbody>
@@ -148,7 +163,10 @@
   <!-- 待确认 -->
   <section id="tab-review" class="hidden">
     <div class="panel">
-      <h2>待人工确认的报告（OCR 识别置信度低）</h2>
+      <div class="panel-head">
+        <h2>待人工确认的报告（OCR 识别置信度低）</h2>
+        <button class="btn-refresh" onclick="loadReview()">刷新</button>
+      </div>
       <p class="muted" style="margin-bottom:12px">这些文件识别不准，把文件名发给豆包，告诉它正确的等级/机构/日期，会自动重新归档。</p>
       <table>
         <thead><tr><th>文件名</th><th>大小</th><th>识别猜测</th><th>待确认原因</th><th>时间</th></tr></thead>
@@ -182,8 +200,13 @@ async function openFolder(relPath) {
 
 async function loadIssues(status) {
   $('#issues-body').dataset.loaded = '1';
+  $('#issues-body').dataset.filter = status;
   $('#issues-body').innerHTML = '<tr><td colspan="6" class="muted">加载中...</td></tr>';
   const r = await fetch('/api/issues?status=' + status).then(r => r.json());
+  if (r.error) {
+    $('#issues-body').innerHTML = `<tr><td colspan="6" class="muted" style="color:#e5534b">⚠ ${r.error.slice(0,100)}</td></tr>`;
+    return;
+  }
   const items = r.items || [];
   $('#issues-body').innerHTML = items.length ? items.map(it => {
     const color = it.status.includes('过期') ? '#d68a1a' : '#e5534b';
@@ -295,8 +318,78 @@ $('#btn-refresh').onclick = async () => {
 // 默认填今天日期
 $('#in-date').valueAsDate = new Date();
 
+// 自动刷新倒计时
+let countdown = 60;
+setInterval(() => {
+  countdown--;
+  if (countdown <= 0) {
+    countdown = 60;
+    loadStats();
+    // 如果当前在某个页签，也刷新它
+    const active = document.querySelector('nav button.active').dataset.tab;
+    if (active === 'orders') loadOrders();
+    if (active === 'issues') loadIssues($('#issues-body').dataset.filter || '');
+    if (active === 'reports') loadReports();
+  }
+  const el = document.getElementById('clock');
+  if (el) el.textContent = el.textContent.split(' (')[0] + ` (${countdown}s后刷新)`;
+}, 1000);
+
+// 加载时也显示错误提示
+async function loadReports() {
+  $('#reports-body').innerHTML = '<tr><td colspan="7" class="muted">加载中...</td></tr>';
+  const r = await fetch('/api/reports').then(r => r.json());
+  if (r.error) {
+    $('#reports-body').innerHTML = `<tr><td colspan="7" class="muted" style="color:#e5534b">⚠ ${r.error.slice(0,100)}</td></tr>`;
+    return;
+  }
+  const fields = r.fields || [];
+  const rows = r.data || [];
+  const idx = name => fields.indexOf(name);
+  const cell = (row, name) => {
+    const v = row[idx(name)];
+    if (Array.isArray(v)) return v[0] || '';
+    return v || '';
+  };
+  const valid = rows.filter(row => row.some(v => v !== null && v !== ''));
+  $('#reports-body').innerHTML = valid.length ? valid.map(row => {
+    const lv = cell(row, '报告等级');
+    return `<tr><td>${cell(row,'文件名')}</td>
+      <td><span class="badge ${lv.slice(0,2)}">${lv}</span></td>
+      <td>${cell(row,'报告类型')}</td><td>${cell(row,'检测机构')}</td>
+      <td>${cell(row,'报告日期').slice(0,10)}</td>
+      <td>${cell(row,'产品SKU')}</td><td>${cell(row,'置信度')}</td></tr>`;
+  }).join('') : '<tr><td colspan="7" class="muted">暂无数据</td></tr>';
+}
+
+async function loadOrders() {
+  $('#orders-body').innerHTML = '<tr><td colspan="7" class="muted">加载中...</td></tr>';
+  const r = await fetch('/api/orders').then(r => r.json());
+  if (r.error) {
+    $('#orders-body').innerHTML = `<tr><td colspan="7" class="muted" style="color:#e5534b">⚠ ${r.error.slice(0,100)}</td></tr>`;
+    return;
+  }
+  const fields = r.fields || [];
+  const rows = r.data || [];
+  const idx = name => fields.indexOf(name);
+  const valid = rows.filter(row => row.some(v => v !== null && v !== ''));
+  $('#orders-body').innerHTML = valid.length ? valid.map(row => {
+    const order_no = row[idx('订单号')] || '';
+    const customer = row[idx('客户')] || '';
+    const items = row[idx('商品行数')] || 0;
+    const reports = row[idx('报告数')] || 0;
+    const issues = row[idx('异常数')] || 0;
+    const time = (row[idx('打包时间')] || '').slice(0,16);
+    return `<tr><td>${order_no}</td><td>${customer}</td>
+      <td>${items}</td><td>${reports}</td>
+      <td style="color:${issues>0?'#e5534b':'#166534'}">${issues}</td>
+      <td>${time}</td>
+      <td><a href="/api/preview/${order_no}" target="_blank" style="color:#1f6feb">预览</a>
+          · <a href="#" onclick="openFolder('${customer}');return false;" style="color:#1f6feb">文件夹</a></td></tr>`;
+  }).join('') : '<tr><td colspan="7" class="muted">暂无打包记录</td></tr>';
+}
+
 loadStats();
-setInterval(loadStats, 60000);
 </script>
 </body>
 </html>

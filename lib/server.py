@@ -91,15 +91,21 @@ def api_stats():
 # ---------- 报告库 ----------
 @app.route("/api/reports")
 def api_reports():
-    data = bitable.list_reports(page_size=int(request.args.get("limit", 50)))
-    return jsonify(data)
+    try:
+        data = bitable.list_reports(page_size=int(request.args.get("limit", 50)))
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"fields": [], "data": [], "error": str(e)[:200]}), 200
 
 
 # ---------- 订单关联 ----------
 @app.route("/api/orders")
 def api_orders():
-    data = bitable.list_orders(page_size=int(request.args.get("limit", 50)))
-    return jsonify(data)
+    try:
+        data = bitable.list_orders(page_size=int(request.args.get("limit", 200)))
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"fields": [], "data": [], "error": str(e)[:200]}), 200
 
 
 # ---------- 打包 ----------
@@ -225,7 +231,7 @@ def api_issues():
     """缺报告/过期的商品明细，从商品索引表扫"""
     status_filter = request.args.get("status", "")  # missing | expired | ""
     try:
-        items = bitable.list_items(page_size=500)
+        items = bitable.list_items(page_size=200)
         fields = items.get("fields") or []
         rows = items.get("data") or []
         idx = lambda name: fields.index(name) if name in fields else -1
