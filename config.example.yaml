@@ -1,20 +1,20 @@
 # 复制为 config.yaml 后填入真实值（config.yaml 已被 .gitignore 排除，不会提交）
 
 sdp:
-  appid: "e31649be1793b380"
-  secret: "644ff72ecc291cee488146af465d7ce7"
-  project_code: "cc_xdsl"        # 正式环境项目 code
+  appid: "YOUR_SDP_APPID"           # 蔬东坡 API appid
+  secret: "YOUR_SDP_SECRET"        # 蔬东坡 API secret
+  project_code: "YOUR_PROJECT_CODE" # 蔬东坡项目 code，如 cc_xdsl
   base_url: "https://scm.sdongpo.com"
 
 storage:
-  library_root: "~/Vonework/library"          # 本地报告归档根目录（跨平台）
-  inbox_dir: "~/Downloads/供应商报告"          # 待入库收件箱
-  pack_out_dir: "~/Vonework/library/_packed"  # 合订本输出目录
+  library_root: "~/qc_reports"                    # 本地报告归档根目录（跨平台）
+  inbox_dir: "~/Downloads/供应商报告"               # 待入库收件箱
+  pack_out_dir: "~/qc_reports/_packed"            # 合订本输出目录
 
 bitable:
-  app_token: "SYnubkNJDa8sYus9TdKcUmFfnYb"    # 飞书多维表格 app_token
-  reports_table_id: "tblzyCNRP2unTTUF"         # 报告库表（后续会新增订单关联表）
-  orders_table_id: ""                          # 订单关联表，首次运行自动建
+  app_token: "YOUR_BITABLE_APP_TOKEN"             # 飞书多维表格 app_token
+  reports_table_id: "YOUR_REPORTS_TABLE_ID"        # 报告库表 table_id
+  orders_table_id: ""                              # 订单关联表，首次运行自动建
 
 server:
   host: "127.0.0.1"
