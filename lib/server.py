@@ -228,48 +228,52 @@ def api_preview(order_no):
 # ---------- 异常明细 ----------
 @app.route("/api/issues")
 def api_issues():
-    """缺报告/过期的商品明细，从商品索引表扫"""
+    """缺报告/过期的商品明细。优先从本地索引 CSV 读（快），飞书作为补充。"""
     status_filter = request.args.get("status", "")  # missing | expired | ""
-    try:
-        items = bitable.list_items(page_size=200)
-        fields = items.get("fields") or []
-        rows = items.get("data") or []
-        idx = lambda name: fields.index(name) if name in fields else -1
-        order_idx = idx("订单号")
-        product_idx = idx("商品名称")
-        status_idx = idx("状态")
-        report_idx = idx("报告文件")
-        customer_idx = idx("客户")
 
-        result = []
-        for row in rows:
-            if not isinstance(row, list):
-                continue
-            # 状态字段是数组
-            status_cell = row[status_idx] if status_idx >= 0 else []
-            status_val = ""
-            if isinstance(status_cell, list) and status_cell:
-                status_val = str(status_cell[0])
-            elif isinstance(status_cell, str):
-                status_val = status_cell
+    # 从本地所有 00_索引.csv 扫描
+    import csv
+    lib = cfgmod.library_root()
+    packed = lib / "_packed"
+    items = []
 
-            if status_filter == "missing" and "无报告" not in status_val:
-                continue
-            if status_filter == "expired" and "过期" not in status_val:
-                continue
-            if not status_filter and "正常" in status_val:
+    if packed.exists():
+        for idx_csv in packed.rglob("*/**/00_索引.csv"):
+            # 从路径解析客户和日期: 客户名/日期/订单号/00_索引.csv
+            parts = idx_csv.parts
+            order_dir = idx_csv.parent
+            date_dir = order_dir.parent
+            customer_dir = date_dir.parent
+            customer = customer_dir.name if customer_dir != packed else ""
+            delivery_date = date_dir.name if date_dir != packed else ""
+            order_no = order_dir.name
+
+            try:
+                with open(idx_csv, encoding="utf-8-sig") as f:
+                    for row in csv.DictReader(f):
+                        status = row.get("状态", "")
+                        product = row.get("商品", "")
+                        report = row.get("报告文件", "")
+
+                        if status_filter == "missing" and "无报告" not in status:
+                            continue
+                        if status_filter == "expired" and "过期" not in status:
+                            continue
+                        if not status_filter and "正常" in status:
+                            continue
+
+                        items.append({
+                            "order_no": order_no,
+                            "customer": customer,
+                            "delivery_date": delivery_date,
+                            "product": product,
+                            "status": status,
+                            "report": report,
+                        })
+            except Exception:
                 continue
 
-            result.append({
-                "order_no": row[order_idx] if order_idx >= 0 else "",
-                "customer": row[customer_idx] if customer_idx >= 0 else "",
-                "product": row[product_idx] if product_idx >= 0 else "",
-                "status": status_val,
-                "report": row[report_idx] if report_idx >= 0 else "",
-            })
-        return jsonify({"total": len(result), "items": result[:200]})
-    except Exception as e:
-        return jsonify({"total": 0, "items": [], "error": str(e)}), 200
+    return jsonify({"total": len(items), "items": items[:500]})
 
 
 # ---------- 打开本地文件夹 ----------
